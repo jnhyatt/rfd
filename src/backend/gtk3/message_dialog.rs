@@ -82,8 +82,13 @@ impl GtkMessageDialog {
         let description = CString::new(s).unwrap();
 
         let ptr = unsafe {
+            let mut parent_gtk_window = ptr::null_mut();
+            if let Some(parent_handle) = &opt.parent {
+                parent_gtk_window = super::utils::find_gtk_window(parent_handle);
+            }
+
             let dialog = gtk_sys::gtk_message_dialog_new(
-                ptr::null_mut(),
+                parent_gtk_window,
                 gtk_sys::GTK_DIALOG_MODAL,
                 level,
                 buttons,
@@ -209,6 +214,7 @@ impl AsyncMessageDialogImpl for MessageDialog {
             gtk_sys::GTK_RESPONSE_CANCEL => MessageDialogResult::Cancel,
             gtk_sys::GTK_RESPONSE_YES => MessageDialogResult::Yes,
             gtk_sys::GTK_RESPONSE_NO => MessageDialogResult::No,
+            gtk_sys::GTK_RESPONSE_DELETE_EVENT => MessageDialogResult::Cancel,
             _ => unreachable!(),
         });
         Box::pin(future)

@@ -12,7 +12,7 @@ use windows_sys::{
         System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER},
         UI::Shell::{
             FileOpenDialog, FileSaveDialog, SHCreateItemFromParsingName, FOS_ALLOWMULTISELECT,
-            FOS_PICKFOLDERS,
+            FOS_FORCESHOWHIDDEN, FOS_PICKFOLDERS,
         },
     },
 };
@@ -82,6 +82,20 @@ impl DialogInner {
     }
 
     #[inline]
+    unsafe fn get_options(&self) -> Result<FILEOPENDIALOGOPTIONS> {
+        let (d, v) = self.fd();
+        let mut opts = 0;
+        wrap_err((v.GetOptions)(d, &mut opts))?;
+        Ok(opts)
+    }
+
+    #[inline]
+    unsafe fn add_options(&self, opts: FILEOPENDIALOGOPTIONS) -> Result<()> {
+        let current = self.get_options()?;
+        self.set_options(current | opts)
+    }
+
+    #[inline]
     unsafe fn set_title(&self, title: &[u16]) -> Result<()> {
         let (d, v) = self.fd();
         wrap_err((v.SetTitle)(d, title.as_ptr()))
@@ -114,7 +128,7 @@ impl DialogInner {
     #[inline]
     unsafe fn show(&self, parent: Option<HWND>) -> Result<()> {
         let (d, v) = self.fd();
-        wrap_err((v.base.Show)(d, parent.unwrap_or_default()))
+        wrap_err((v.base.Show)(d, parent.unwrap_or(std::ptr::null_mut())))
     }
 
     #[inline]
@@ -173,17 +187,14 @@ impl IDialog {
     }
 
     fn add_filters(&self, filters: &[crate::file_dialog::Filter]) -> Result<()> {
-        {
-            let Some(first_filter) = filters.first() else {
-                return Ok(());
-            };
+        if let Some(first_filter) = filters.first() {
             if let Some(first_extension) = first_filter.extensions.first() {
                 let extension = str_to_vec_u16(first_extension);
                 unsafe { self.0.set_default_extension(&extension)? }
             }
         }
 
-        let f_list = {
+        let mut f_list = {
             let mut f_list = Vec::new();
             let mut ext_string = String::new();
 
@@ -204,6 +215,10 @@ impl IDialog {
             }
             f_list
         };
+
+        if f_list.is_empty() {
+            f_list.push((str_to_vec_u16("All Files"), str_to_vec_u16("*.*")));
+        }
 
         let spec: Vec<_> = f_list
             .iter()
@@ -272,6 +287,15 @@ impl IDialog {
         Ok(())
     }
 
+    fn set_show_hidden_files(&self, show: Option<bool>) -> Result<()> {
+        if let Some(true) = show {
+            unsafe {
+                self.0.add_options(FOS_FORCESHOWHIDDEN)?;
+            }
+        }
+        Ok(())
+    }
+
     pub fn get_results(&self) -> Result<Vec<PathBuf>> {
         unsafe { self.0.get_results() }
     }
@@ -293,6 +317,7 @@ impl IDialog {
         dialog.set_path(&opt.starting_directory)?;
         dialog.set_file_name(&opt.file_name)?;
         dialog.set_title(&opt.title)?;
+        dialog.set_show_hidden_files(opt.show_hidden_files)?;
 
         Ok(dialog)
     }
@@ -304,6 +329,7 @@ impl IDialog {
         dialog.set_path(&opt.starting_directory)?;
         dialog.set_file_name(&opt.file_name)?;
         dialog.set_title(&opt.title)?;
+        dialog.set_show_hidden_files(opt.show_hidden_files)?;
 
         Ok(dialog)
     }
@@ -314,8 +340,13 @@ impl IDialog {
         dialog.set_path(&opt.starting_directory)?;
         dialog.set_title(&opt.title)?;
 
+        let mut opts = FOS_PICKFOLDERS;
+        if let Some(true) = opt.show_hidden_files {
+            opts |= FOS_FORCESHOWHIDDEN;
+        }
+
         unsafe {
-            dialog.0.set_options(FOS_PICKFOLDERS)?;
+            dialog.0.set_options(opts)?;
         }
 
         Ok(dialog)
@@ -326,7 +357,11 @@ impl IDialog {
 
         dialog.set_path(&opt.starting_directory)?;
         dialog.set_title(&opt.title)?;
-        let opts = FOS_PICKFOLDERS | FOS_ALLOWMULTISELECT;
+
+        let mut opts = FOS_PICKFOLDERS | FOS_ALLOWMULTISELECT;
+        if let Some(true) = opt.show_hidden_files {
+            opts |= FOS_FORCESHOWHIDDEN;
+        }
 
         unsafe {
             dialog.0.set_options(opts)?;
@@ -343,8 +378,13 @@ impl IDialog {
         dialog.set_file_name(&opt.file_name)?;
         dialog.set_title(&opt.title)?;
 
+        let mut opts = FOS_ALLOWMULTISELECT;
+        if let Some(true) = opt.show_hidden_files {
+            opts |= FOS_FORCESHOWHIDDEN;
+        }
+
         unsafe {
-            dialog.0.set_options(FOS_ALLOWMULTISELECT)?;
+            dialog.0.set_options(opts)?;
         }
 
         Ok(dialog)

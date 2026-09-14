@@ -1,4 +1,3 @@
-use super::thread_future::ThreadFuture;
 use super::utils::str_to_vec_u16;
 use crate::message_dialog::{MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 
@@ -70,9 +69,9 @@ impl WinMessageDialog {
 
     #[cfg(feature = "common-controls-v6")]
     pub fn run(self) -> MessageDialogResult {
-        use windows_sys::Win32::{
-            Foundation::BOOL,
-            UI::Controls::{
+        use windows_sys::{
+            core::BOOL,
+            Win32::UI::Controls::{
                 TaskDialogIndirect, TASKDIALOGCONFIG, TASKDIALOGCONFIG_0, TASKDIALOGCONFIG_1,
                 TASKDIALOG_BUTTON, TDCBF_CANCEL_BUTTON, TDCBF_NO_BUTTON, TDCBF_OK_BUTTON,
                 TDCBF_YES_BUTTON, TDF_ALLOW_DIALOG_CANCELLATION, TDF_SIZE_TO_CONTENT,
@@ -134,7 +133,7 @@ impl WinMessageDialog {
 
         let task_dialog_config = TASKDIALOGCONFIG {
             cbSize: core::mem::size_of::<TASKDIALOGCONFIG>() as u32,
-            hwndParent: self.parent.unwrap_or_default(),
+            hwndParent: self.parent.unwrap_or(std::ptr::null_mut()),
             dwFlags: TDF_ALLOW_DIALOG_CANCELLATION | TDF_SIZE_TO_CONTENT,
             pszWindowTitle: self.caption.as_ptr(),
             pszContent: self.text.as_ptr(),
@@ -150,7 +149,7 @@ impl WinMessageDialog {
             pRadioButtons: std::ptr::null(),
             cRadioButtons: 0,
             cxWidth: 0,
-            hInstance: 0,
+            hInstance: std::ptr::null_mut(),
             pfCallback: None,
             lpCallbackData: 0,
             nDefaultButton: 0,
@@ -206,7 +205,7 @@ impl WinMessageDialog {
     pub fn run(self) -> MessageDialogResult {
         let ret = unsafe {
             MessageBoxW(
-                self.parent.unwrap_or_default(),
+                self.parent.unwrap_or(std::ptr::null_mut()),
                 self.text.as_ptr(),
                 self.caption.as_ptr(),
                 self.flags,
@@ -220,10 +219,6 @@ impl WinMessageDialog {
             IDNO => MessageDialogResult::No,
             _ => MessageDialogResult::Cancel,
         }
-    }
-
-    pub fn run_async(self) -> ThreadFuture<MessageDialogResult> {
-        ThreadFuture::new(move |data| *data = Some(self.run()))
     }
 }
 
@@ -241,7 +236,14 @@ use crate::backend::DialogFutureType;
 
 impl AsyncMessageDialogImpl for MessageDialog {
     fn show_async(self) -> DialogFutureType<MessageDialogResult> {
-        let dialog = WinMessageDialog::new(self);
-        Box::pin(dialog.run_async())
+        Box::pin(async move {
+            let (tx, rx) = crate::oneshot::channel();
+
+            std::thread::spawn(move || {
+                tx.send(self.show()).ok();
+            });
+
+            rx.await.unwrap_or(MessageDialogResult::Cancel)
+        })
     }
 }

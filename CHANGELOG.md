@@ -1,12 +1,70 @@
 # Change Log
 
 ## Unreleased
+
+- Fix macOS file dialogs ignoring `set_directory` when `set_file_name` is also used.
+- Add `FileDialog::set_show_hidden_files` and `AsyncFileDialog::set_show_hidden_files` to control hidden file visibility. Supported on macOS, Windows, and Linux (GTK3).
+- Honor `FileDialog::set_directory` and `AsyncFileDialog::set_directory` when using the zenity fallback backend on Linux.
+- Fix `liblary` typo in docs
+- Change wasm title to sanitize text contents via `title_el.set_text_content()` rather than `title_el.set_inner_html()`.
+
+## 0.17.2
+
+- Lower MSRV back to 1.88 by @PolyMeilex in https://github.com/PolyMeilex/rfd/pull/303
+
+## 0.17.1
+
+- Fix aarch64 compile error and add CI by @oscargus in https://github.com/PolyMeilex/rfd/pull/294
+- docs: Fixup docs post libdbus port by @PolyMeilex in https://github.com/PolyMeilex/rfd/pull/298
+- xdg_porta: Url decode the path by @PolyMeilex in https://github.com/PolyMeilex/rfd/pull/297
+
+## 0.17.0
+
+- `tokio` and `async-std` features removed
+
+## 0.16.0
+
+- Fix regressions on Wayland due to `ashpd` upgrade (#255).
+- The `pick_file()` method of file dialog targeted WASM now can return `None` correctly when cancelled (#258)
+- Update `windows-sys` to 0.60.
+- Make `ashpd` Wayland APIs optional. These are now gated behind the `wayland` feature, which is enabled by default.
+
+### Changed items in the public API
+```diff
+-pub fn AsyncFileDialog::set_parent<W: HasWindowHandle + HasDisplayHandle>(self, parent: &W) -> Self
++pub fn AsyncFileDialog::set_parent<W: HasWindowHandle + HasDisplayHandle + ?Sized>(self, parent: &W) -> Self
+-pub fn AsyncMessageDialog::set_parent<W: HasWindowHandle + HasDisplayHandle>(self, parent: &W) -> Self
++pub fn MessageDialog::set_parent<W: HasWindowHandle + HasDisplayHandle + ?Sized>(self, parent: &W) -> Self
+-pub fn FileDialog::set_parent<W: HasWindowHandle + HasDisplayHandle>(self, parent: &W) -> Self
++pub fn rfd::FileDialog::set_parent<W: HasWindowHandle + HasDisplayHandle + ?Sized>(self, parent: &W) -> Self
+-pub fn MessageDialog::set_parent<W: HasWindowHandle + HasDisplayHandle>(self, parent: &W) -> Self
++pub fn MessageDialog::set_parent<W: HasWindowHandle + HasDisplayHandle + ?Sized>(self, parent: &W) -> Self
+```
+
+## 0.15.3
+
+- Update `objc2` to v0.6.
+- Update `ashpd` to 0.11.
+
+## 0.15.1
+
+- Update `ashpd` to 0.10.
+- Fix issue where with no filter added no files are selectable on Windows (#211).
+
+## 0.15.0
+
 - Move from `objc` crates to `objc2` crates.
 - Fix `AsyncFileDialog` blocking the executor on Windows (#191)
 - Add `TDF_SIZE_TO_CONTENT` to `TaskDialogIndirect` config so that it can display longer text without truncating/wrapping (80 characters instead of 55) (#202)
 - Fix `xdg-portal` backend not accepting special characters in message dialogs
+- Make `set_parent` require `HasWindowHandle + HasDisplayHandle`
+- Add support for `set_parent` in XDG Portals
+- Update `ashpd` to 0.9.
+- Add support for files without an extension in XDG Portal filters
+- Derive `Clone` for `FileHandle`
 
 ## 0.14.0
+
 - i18n for GTK and XDG Portal
 - Use XDG Portal as default
 - Use zenity as a fallback for XDG Portal
@@ -18,57 +76,70 @@
 - Add `FileDialog/AsyncFileDialog::set_can_create_directories`, supported on macOS only.
 
 ## 0.13.0
+
 - **[Breaking]** Users of the `xdg-portal` feature must now also select the `tokio`
   or `async-std` feature
 - [macOS] Use NSOpenPanel.message instead of title #166
 
 ## 0.12.1
+
 - Fix `FileHandle::inner` (under feature `file-handle-inner`) on wasm
 
 ## 0.12.0
-- Add title support for WASM (#132) 
+
+- Add title support for WASM (#132)
 - Add Create folder button to `pick_folder` on macOS (#127)
 - Add support for Yes/No/Cancel buttons (#123)
-- Change a string method signatures #117 
+- Change a string method signatures #117
 - WASM `save_file` (#134)
 - Update `gtk-sys` to `0.18` (#143)
 - Update `ashpd` to `0.6` (#133)
-- Replace windows with `windows-sys` (#118) 
+- Replace windows with `windows-sys` (#118)
 - Make zenity related deps optional (#141)
 
 ## 0.11.3
-- Zenity message dialogs for xdg portal backend 
+
+- Zenity message dialogs for xdg portal backend
 
 ## 0.10.1
+
 - Update `gtk-sys` to `0.16` and `windows-rs` to `0.44`
 
 ## 0.10.0
+
 - fix(FileDialog::set_directory): fallback to default if path is empty
 
 ## 0.9.0
+
 - feat: customize button text, Close #74
 - feat: Add support for selecting multiple folders, fixes #73
 
 ## 0.8.4
-- XDG: decode URI before converting to PathBuf #70 
-  
+
+- XDG: decode URI before converting to PathBuf #70
+
 ## 0.8.3
+
 - Windows-rs update 0.37
 
 ## 0.8.2
+
 - Windows-rs update 0.35
 
 ## 0.8.1
+
 - Macos parent for sync FileDialog (#58)
 - Windows-rs update 0.33
 
 ## 0.8.0
+
 - `parent` feature was removed, it is always on now
-- New feature `xdg-portal` 
+- New feature `xdg-portal`
 - Now you have to choose one of the features `gtk3` or `xdg-portal`, gtk is on by default
 - `window` crate got updated to 0.32
 
 ## 0.7.0
+
 - Safe Rust XDG Desktop Portal support
 
 ## 0.6.3
@@ -76,9 +147,11 @@
 - Update `windows` crate to 0.30.
 
 ## 0.6.2
-- Strip Win32 namespaces from directory paths 
+
+- Strip Win32 namespaces from directory paths
 
 ## 0.6.0
+
 - FreeBSD support
 - Port to windows-rs
 - Update RawWindowHandle to 0.4

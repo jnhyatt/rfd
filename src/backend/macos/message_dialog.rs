@@ -4,23 +4,23 @@ use crate::message_dialog::{MessageButtons, MessageDialog, MessageDialogResult, 
 use super::modal_future::AsModal;
 use super::{
     modal_future::{InnerModal, ModalFuture},
-    utils::{run_on_main, FocusManager, PolicyManager},
+    utils::{self, run_on_main, FocusManager, PolicyManager},
 };
 
 use super::utils::window_from_raw_window_handle;
 use block2::Block;
+use objc2::rc::{autoreleasepool, Retained};
+use objc2::MainThreadMarker;
 use objc2_app_kit::{
     NSAlert, NSAlertFirstButtonReturn, NSAlertSecondButtonReturn, NSAlertStyle,
     NSAlertThirdButtonReturn, NSApplication, NSModalResponse, NSWindow,
 };
-use objc2_foundation::{MainThreadMarker, NSString};
-
-use objc2::rc::{autoreleasepool, Id};
+use objc2_foundation::NSString;
 
 pub struct Alert {
     buttons: MessageButtons,
-    alert: Id<NSAlert>,
-    parent: Option<Id<NSWindow>>,
+    alert: Retained<NSAlert>,
+    parent: Option<Retained<NSWindow>>,
     _focus_manager: FocusManager,
     _policy_manager: PolicyManager,
 }
@@ -137,7 +137,7 @@ fn dialog_result(buttons: &MessageButtons, ret: NSModalResponse) -> MessageDialo
 }
 
 impl AsModal for Alert {
-    fn inner_modal(&self) -> &NSAlert {
+    fn inner_modal(&self) -> &(impl InnerModal + 'static) {
         &*self.alert
     }
 }
@@ -155,7 +155,15 @@ impl InnerModal for NSAlert {
 use crate::backend::MessageDialogImpl;
 impl MessageDialogImpl for MessageDialog {
     fn show(self) -> MessageDialogResult {
-        autoreleasepool(move |_| run_on_main(move |mtm| Alert::new(self, mtm).run()))
+        autoreleasepool(move |_| {
+            run_on_main(move |mtm| {
+                if self.parent.is_none() {
+                    utils::sync_pop_dialog(self, mtm)
+                } else {
+                    Alert::new(self, mtm).run()
+                }
+            })
+        })
     }
 }
 
@@ -163,13 +171,14 @@ use crate::backend::AsyncMessageDialogImpl;
 
 impl AsyncMessageDialogImpl for MessageDialog {
     fn show_async(self) -> DialogFutureType<MessageDialogResult> {
-        let win = self.parent.as_ref().map(window_from_raw_window_handle);
-
-        let future = ModalFuture::new(
-            win,
-            move |mtm| Alert::new(self, mtm),
-            |dialog, ret| dialog_result(&dialog.buttons, ret),
-        );
-        Box::pin(future)
+        if self.parent.is_none() {
+            utils::async_pop_dialog(self)
+        } else {
+            Box::pin(ModalFuture::new(
+                self.parent.as_ref().map(window_from_raw_window_handle),
+                move |mtm| Alert::new(self, mtm),
+                |dialog, ret| dialog_result(&dialog.buttons, ret),
+            ))
+        }
     }
 }
